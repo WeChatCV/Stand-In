@@ -544,7 +544,7 @@ class WanVideoPipeline(BasePipeline):
                 new_ref_width = int(ref_width * scale_ratio)
                 new_ref_height = int(ref_height * scale_ratio)
                 
-                resized_image = vace_reference_image.resize((new_ref_width, new_ref_height), LANCZOS)
+                resized_image = vace_reference_image.resize((new_ref_width, new_ref_height), Image.LANCZOS)
                 
                 background = Image.new('RGB', (width, height), (255, 255, 255))
                 
