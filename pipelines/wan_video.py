@@ -10,7 +10,7 @@ from typing import Optional
 from typing_extensions import Literal
 import imageio
 import os
-from typing import List
+from typing import List, Tuple
 import PIL
 from utils import BasePipeline, ModelConfig, PipelineUnit, PipelineUnitRunner
 from models import ModelManager, load_state_dict
@@ -34,16 +34,43 @@ from vram_management import (
 )
 from lora import GeneralLoRALoader
 
-def load_video_as_list(video_path: str) -> List[Image.Image]:
+def load_video_as_list(video_path: str) -> Tuple[List[Image.Image], int, int, int]:
     if not os.path.isfile(video_path):
-        raise FileNotFoundError(video_path)
+        raise FileNotFoundError(f"Video file not found: {video_path}")
+
     reader = imageio.get_reader(video_path)
+
+    meta_data = reader.get_meta_data()
+    original_width = meta_data['size'][0]
+    original_height = meta_data['size'][1]
+    
+    new_width = (original_width // 16) * 16
+    new_height = (original_height // 16) * 16
+    
+    left = (original_width - new_width) // 2
+    top = (original_height - new_height) // 2
+    right = left + new_width
+    bottom = top + new_height
+    crop_box = (left, top, right, bottom)
+
+    original_frame_count = reader.count_frames()
+    new_frame_count = original_frame_count - ((original_frame_count - 1) % 4)
+
     frames = []
-    for i, frame_data in enumerate(reader):
-        pil_image = Image.fromarray(frame_data)
-        frames.append(pil_image)
+    for i in range(new_frame_count):
+        try:
+            frame_data = reader.get_data(i)
+            pil_image = Image.fromarray(frame_data)
+            cropped_image = pil_image.crop(crop_box)
+            frames.append(cropped_image)
+        except IndexError:
+            print(f"Warning: Actual number of frames is less than expected. Stopping at frame {i}.")
+            new_frame_count = len(frames)
+            break
+
     reader.close()
-    return frames
+
+    return frames, new_width, new_height, new_frame_count
 
 class WanVideoPipeline(BasePipeline):
     def __init__(self, device="cuda", torch_dtype=torch.bfloat16, tokenizer_path=None):
@@ -507,9 +534,25 @@ class WanVideoPipeline(BasePipeline):
         if ip_image is not None:
             ip_image = self.encode_ip_image(ip_image)
         if vace_video is not None:
-            vace_video = load_video_as_list(vace_video)
+            vace_video, width, height, num_frames = load_video_as_list(vace_video)
         if vace_reference_image is not None:
-            vace_reference_image = PIL.Image.open(vace_reference_image)
+            vace_reference_image = Image.open(vace_reference_image).convert('RGB')
+            ref_width, ref_height = vace_reference_image.size
+            if ref_width != width or ref_height != height:
+                scale_ratio = min(width / ref_width, height / ref_height)
+                
+                new_ref_width = int(ref_width * scale_ratio)
+                new_ref_height = int(ref_height * scale_ratio)
+                
+                resized_image = vace_reference_image.resize((new_ref_width, new_ref_height), LANCZOS)
+                
+                background = Image.new('RGB', (width, height), (255, 255, 255))
+                
+                paste_x = (width - new_ref_width) // 2
+                paste_y = (height - new_ref_height) // 2               
+                background.paste(resized_image, (paste_x, paste_y))
+                
+                vace_reference_image = background
         # Scheduler
         self.scheduler.set_timesteps(
             num_inference_steps,
