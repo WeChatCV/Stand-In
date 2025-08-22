@@ -532,7 +532,11 @@ class WanVideoPipeline(BasePipeline):
         ip_image=None,
     ):
         if ip_image is not None:
-            ip_image = self.encode_ip_image(ip_image)
+            if isinstance(ip_image, list):
+                ip_image = [self.encode_ip_image(img) for img in ip_image]
+            else:
+                ip_image = self.encode_ip_image(ip_image)
+
         if vace_video is not None:
             vace_video, width, height, num_frames = load_video_as_list(vace_video)
         if vace_reference_image is not None:
@@ -1692,25 +1696,53 @@ def model_fn_wan_video(
 
     ############################################################################################
     if ip_image is not None:
-        x_ip, (f_ip, h_ip, w_ip) = dit.patchify(
-            ip_image
-        )  # x_ip [1, 1024, 5120] [B, N, D]   f_ip = 1  h_ip = 32  w_ip = 32
-        freqs_ip = (
-            torch.cat(
-                [
-                    dit.freqs[0][0].view(f_ip, 1, 1, -1).expand(f_ip, h_ip, w_ip, -1),
-                    dit.freqs[1][h + offset : h + offset + h_ip]
-                    .view(1, h_ip, 1, -1)
-                    .expand(f_ip, h_ip, w_ip, -1),
-                    dit.freqs[2][w + offset : w + offset + w_ip]
-                    .view(1, 1, w_ip, -1)
-                    .expand(f_ip, h_ip, w_ip, -1),
-                ],
-                dim=-1,
+        if isinstance(ip_image, list):
+            x_ip = []
+            freqs_ip_list = []  # List to store freqs_ip for each image
+
+            for img in ip_image:
+                x_ip_single, (f_ip, h_ip, w_ip) = dit.patchify(img)  # Get patch info for the current image
+                freqs_ip = (
+                    torch.cat(
+                        [
+                            dit.freqs[0][0].view(f_ip, 1, 1, -1).expand(f_ip, h_ip, w_ip, -1),
+                            dit.freqs[1][h + offset : h + offset + h_ip]
+                            .view(1, h_ip, 1, -1)
+                            .expand(f_ip, h_ip, w_ip, -1),
+                            dit.freqs[2][w + offset : w + offset + w_ip]
+                            .view(1, 1, w_ip, -1)
+                            .expand(f_ip, h_ip, w_ip, -1),
+                        ],
+                        dim=-1,
+                    )
+                    .reshape(f_ip * h_ip * w_ip, 1, -1)
+                    .to(x.device)
+                )
+                freqs_ip_list.append(freqs_ip)  # Store the current freqs_ip
+                x_ip.append(x_ip_single)
+                offset += h_ip  # Update the offset for the next image
+
+            freqs_ip = torch.cat(freqs_ip_list, dim=0)
+        else:
+            x_ip, (f_ip, h_ip, w_ip) = dit.patchify(
+                ip_image
+            )  # x_ip [1, 1024, 5120] [B, N, D]   f_ip = 1  h_ip = 32  w_ip = 32
+            freqs_ip = (
+                torch.cat(
+                    [
+                        dit.freqs[0][0].view(f_ip, 1, 1, -1).expand(f_ip, h_ip, w_ip, -1),
+                        dit.freqs[1][h + offset : h + offset + h_ip]
+                        .view(1, h_ip, 1, -1)
+                        .expand(f_ip, h_ip, w_ip, -1),
+                        dit.freqs[2][w + offset : w + offset + w_ip]
+                        .view(1, 1, w_ip, -1)
+                        .expand(f_ip, h_ip, w_ip, -1),
+                    ],
+                    dim=-1,
+                )
+                .reshape(f_ip * h_ip * w_ip, 1, -1)
+                .to(x.device)
             )
-            .reshape(f_ip * h_ip * w_ip, 1, -1)
-            .to(x_ip.device)
-        )
         freqs_original = freqs
         freqs = torch.cat([freqs, freqs_ip], dim=0)
     ############################################################################################

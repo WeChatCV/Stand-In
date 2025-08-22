@@ -187,7 +187,7 @@ class SelfAttention(nn.Module):
 
         self.kv_cache = None
         self.cond_size = None
-
+        self.single_cond_size = None
     def init_lora(self, train=False):
         dim = self.dim
         self.q_loras = LoRALinearLayer(dim, dim, rank=128)
@@ -203,9 +203,37 @@ class SelfAttention(nn.Module):
         if self.cond_size is not None:
             if self.kv_cache is None:
                 x_main, x_ip = x[:, : -self.cond_size], x[:, -self.cond_size :]
+                x_ip_splits = torch.split(x_ip, self.single_cond_size, dim=1)
+
                 split_point = freqs.shape[0] - self.cond_size
                 freqs_main = freqs[:split_point]
                 freqs_ip = freqs[split_point:]
+                freqs_ip_splits = torch.split(freqs_ip, self.single_cond_size, dim=0)
+
+                k_ip_full = None
+                v_ip_full = None
+                cond_out = None
+                for x_ip_single, freqs_ip_single in zip(x_ip_splits,freqs_ip_splits):
+                    q_ip_single = self.norm_q(self.q(x_ip_single) + self.q_loras(x_ip_single))
+                    k_ip_single = self.norm_k(self.k(x_ip_single) + self.k_loras(x_ip_single))
+                    v_ip_single = self.v(x_ip_single) + self.v_loras(x_ip_single)
+
+                    q_ip_single = rope_apply(q_ip_single, freqs_ip_single, self.num_heads)
+                    k_ip_single = rope_apply(k_ip_single, freqs_ip_single, self.num_heads)
+
+                    single_cond_out = self.attn(q_ip_single, k_ip_single, v_ip_single)
+                    if cond_out is None:
+                        cond_out = single_cond_out
+                    else:
+                        cond_out = torch.cat([cond_out, single_cond_out], dim=1)
+
+                    if k_ip_full is None:
+                        k_ip_full = k_ip_single
+                        v_ip_full = v_ip_single
+                    else:
+                        k_ip_full = torch.cat([k_ip_full, k_ip_single], dim=1)
+                        v_ip_full = torch.cat([v_ip_full, v_ip_single], dim=1)
+                self.kv_cache = {"k_ip": k_ip_full.detach(), "v_ip": v_ip_full.detach()}
 
                 q_main = self.norm_q(self.q(x_main))
                 k_main = self.norm_k(self.k(x_main))
@@ -214,16 +242,8 @@ class SelfAttention(nn.Module):
                 q_main = rope_apply(q_main, freqs_main, self.num_heads)
                 k_main = rope_apply(k_main, freqs_main, self.num_heads)
 
-                q_ip = self.norm_q(self.q(x_ip) + self.q_loras(x_ip))
-                k_ip = self.norm_k(self.k(x_ip) + self.k_loras(x_ip))
-                v_ip = self.v(x_ip) + self.v_loras(x_ip)
-
-                q_ip = rope_apply(q_ip, freqs_ip, self.num_heads)
-                k_ip = rope_apply(k_ip, freqs_ip, self.num_heads)
-                self.kv_cache = {"k_ip": k_ip.detach(), "v_ip": v_ip.detach()}
-                full_k = torch.concat([k_main, k_ip], dim=1)
-                full_v = torch.concat([v_main, v_ip], dim=1)
-                cond_out = self.attn(q_ip, k_ip, v_ip)
+                full_k = torch.concat([k_main, k_ip_full], dim=1)
+                full_v = torch.concat([v_main, v_ip_full], dim=1)
                 main_out = self.attn(q_main, full_k, full_v)
                 out = torch.concat([main_out, cond_out], dim=1)
                 return self.o(out)
@@ -351,11 +371,19 @@ class DiTBlock(nn.Module):
                 self.modulation.to(dtype=t_mod_ip.dtype, device=t_mod_ip.device)
                 + t_mod_ip
             ).chunk(6, dim=1)
-            input_x_ip = modulate(
-                self.norm1(x_ip), shift_msa_ip, scale_msa_ip
-            )  # [1, 1024, 5120]
-            self.self_attn.cond_size = input_x_ip.shape[1]
-            input_x = torch.concat([input_x, input_x_ip], dim=1)
+            if isinstance(x_ip, list):
+                input_x_ip_list = [modulate(self.norm1(x_ip_single), shift_msa_ip, scale_msa_ip) for x_ip_single in x_ip]
+                self.self_attn.cond_size = sum([x.shape[1] for x in input_x_ip_list])
+                self.self_attn.single_cond_size = input_x_ip_list[0].shape[1] 
+                for input_x_ip_single in input_x_ip_list:
+                    input_x = torch.cat([input_x, input_x_ip_single], dim=1)                    
+            else:
+                input_x_ip = modulate(
+                    self.norm1(x_ip), shift_msa_ip, scale_msa_ip
+                )  # [1, 1024, 5120]
+                self.self_attn.cond_size = input_x_ip.shape[1]
+                self.self_attn.single_cond_size = input_x_ip.shape[1] 
+                input_x = torch.concat([input_x, input_x_ip], dim=1)
             self.self_attn.kv_cache = None
 
         attn_out = self.self_attn(input_x, freqs)
@@ -364,16 +392,19 @@ class DiTBlock(nn.Module):
                 attn_out[:, : -self.self_attn.cond_size],
                 attn_out[:, -self.self_attn.cond_size :],
             )
+            attn_out_ip_list = torch.split(attn_out_ip, self.self_attn.single_cond_size, dim=1)
+            processed_x_ip_list = []
+            for x_ip_single, attn_out_ip_single in zip(x_ip, attn_out_ip_list):
+                x_ip_single = self.gate(x_ip_single, gate_msa_ip, attn_out_ip_single)
+                input_x_ip_single = modulate(self.norm2(x_ip_single), shift_mlp_ip, scale_mlp_ip)
+                x_ip_single = self.gate(x_ip_single, gate_mlp_ip, self.ffn(input_x_ip_single))
+                processed_x_ip_list.append(x_ip_single)
 
+            x_ip = processed_x_ip_list
         x = self.gate(x, gate_msa, attn_out)
         x = x + self.cross_attn(self.norm3(x), context)
         input_x = modulate(self.norm2(x), shift_mlp, scale_mlp)
         x = self.gate(x, gate_mlp, self.ffn(input_x))
-
-        if x_ip is not None:
-            x_ip = self.gate(x_ip, gate_msa_ip, attn_out_ip)
-            input_x_ip = modulate(self.norm2(x_ip), shift_mlp_ip, scale_mlp_ip)
-            x_ip = self.gate(x_ip, gate_mlp_ip, self.ffn(input_x_ip))
         return x, x_ip
 
 
