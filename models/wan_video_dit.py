@@ -60,7 +60,7 @@ def flash_attention(
         q = rearrange(q, "b s (n d) -> b n s d", n=num_heads)
         k = rearrange(k, "b s (n d) -> b n s d", n=num_heads)
         v = rearrange(v, "b s (n d) -> b n s d", n=num_heads)
-        x = sageattn(q, k, v)
+        x = sageattn(q, k, v, tensor_layout="HND", is_causal=False)
         x = rearrange(x, "b n s d -> b s (n d)", n=num_heads)
     else:
         q = rearrange(q, "b s (n d) -> b n s d", n=num_heads)
