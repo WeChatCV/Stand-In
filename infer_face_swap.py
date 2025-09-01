@@ -21,7 +21,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--denoising_strength",
-    type=str,
+    type=float,
     default=0.85,
     help="The lower denoising strength represents a higher similarity to the original video.",
 )
