@@ -622,6 +622,7 @@ class WanVideoPipeline(BasePipeline):
             ):
                 self.load_models_to_device(self.in_iteration_models_2)
                 models["dit"] = self.dit2
+                inputs_shared["ip_image"] = ip_image
 
             # Timestep
             timestep = timestep.unsqueeze(0).to(
