@@ -22,6 +22,7 @@
 ---
 
 ## 🔥 News
+* **[2025.12.22]** The Stand-In version based on Wan2.2 is now live—feel free to use it! 🚀✨
 * **[2025.08.18]** We have released a version compatible with VACE. Not only pose control, but you can also try other control methods such as depth maps, combined with Stand-In to maintain identity simultaneously.
 
 * **[2025.08.16]** We have updated the experimental version of the face swapping feature. Feel free to try it out!
@@ -90,7 +91,7 @@
 ## ✅ Todo List 
 - [x] Release IP2V inference script (compatible with community LoRA).
 - [x] Open-source model weights compatible with Wan2.1-14B-T2V: `Stand-In_Wan2.1-T2V-14B_153M_v1.0`。
-- [ ] Open-source model weights compatible with Wan2.2-T2V-A14B.
+- [x] Open-source model weights compatible with Wan2.2-T2V-A14B.
 - [ ] Release training dataset, data preprocessing scripts, and training code.
 
 ---
@@ -141,6 +142,28 @@ python infer.py \
     --prompt "A man sits comfortably at a desk, facing the camera as if talking to a friend or family member on the screen. His gaze is focused and gentle, with a natural smile. The background is his carefully decorated personal space, with photos and a world map on the wall, conveying a sense of intimate and modern communication." \
     --ip_image "test/input/lecun.jpg" \
     --output "test/output/lecun.mp4"
+```
+**Prompt Writing Tip:** If you do not wish to alter the subject's facial features, simply use *"a man"* or *"a woman"* without adding extra descriptions of their appearance. Prompts support both Chinese and English input. The prompt is intended for generating frontal, medium-to-close-up videos.
+
+**Input Image Recommendation:** For best results, use a high-resolution frontal face image. There are no restrictions on resolution or file extension, as our built-in preprocessing pipeline will handle them automatically.
+
+---
+
+### Standard Inference - Wan2.2
+
+We provide an automatic download script that will fetch all required model weights into the  `checkpoints` directory.
+```bash
+python download_models.py --wan_version 2.2
+```
+
+```bash
+python infer.py \
+    --prompt "A man sits comfortably at a desk, facing the camera as if talking to a friend or family member on the screen. His gaze is focused and gentle, with a natural smile. The background is his carefully decorated personal space, with photos and a world map on the wall, conveying a sense of intimate and modern communication." \
+    --ip_image "test/input/lecun.jpg" \
+    --output "test/output/lecun.mp4" \
+    --wan_version "2.2" \
+    --fps 16 \
+    --base_path checkpoints/Wan2.2/t2v
 ```
 **Prompt Writing Tip:** If you do not wish to alter the subject's facial features, simply use *"a man"* or *"a woman"* without adding extra descriptions of their appearance. Prompts support both Chinese and English input. The prompt is intended for generating frontal, medium-to-close-up videos.
 

@@ -28,6 +28,9 @@ parser.add_argument(
 parser.add_argument(
     "--num_inference_steps", type=int, default=20, help="Number of inference steps"
 )
+parser.add_argument(
+    "--wan_version", type=str, default="2.1", help="Wan version"
+)
 
 parser.add_argument(
     "--negative_prompt",
@@ -45,13 +48,13 @@ parser.add_argument(
 parser.add_argument(
     "--base_path",
     type=str,
-    default="checkpoints/base_model/",
+    default="checkpoints/Wan2.1/t2v",
     help="Path to base model checkpoint",
 )
 parser.add_argument(
     "--stand_in_path",
     type=str,
-    default="checkpoints/Stand-In/Stand-In_wan2.1_T2V_14B_ver1.0.ckpt",
+    default="checkpoints/Stand-In/",
     help="Path to LoRA weights checkpoint",
 )
 parser.add_argument(
@@ -60,18 +63,18 @@ parser.add_argument(
     default="checkpoints/antelopev2",
     help="Path to AntelopeV2 model checkpoint",
 )
-
 args = parser.parse_args()
 
 
 face_processor = FaceProcessor(antelopv2_path=args.antelopv2_path)
 ip_image = face_processor.process(args.ip_image)
 
-pipe = load_wan_pipe(base_path=args.base_path, torch_dtype=torch.bfloat16)
+pipe = load_wan_pipe(base_path=args.base_path, wan_version=args.wan_version, torch_dtype=torch.bfloat16)
 
 set_stand_in(
     pipe,
     model_path=args.stand_in_path,
+    wan_version=args.wan_version
 )
 
 video = pipe(
