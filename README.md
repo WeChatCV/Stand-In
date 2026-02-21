@@ -247,11 +247,11 @@ The original raw material of our dataset was collected with the help of our team
 If you find our work helpful for your research, please consider citing our paper:
 
 ```bibtex
-@article{xue2025standin,
-      title={Stand-In: A Lightweight and Plug-and-Play Identity Control for Video Generation}, 
-      author={Bowen Xue and Qixin Yan and Wenjing Wang and Hao Liu and Chen Li},
-      journal={arXiv preprint arXiv:2508.07901},
-      year={2025},
+@inproceedings{xue2025stand,
+  title={Stand-in: A lightweight and plug-and-play identity control for video generation},
+  author={Xue, Bowen and Duan, Zheng-Peng and Yan, Qixin and Wang, Wenjing and Liu, Hao and Guo, Chun-Le and Li, Chongyi and Li, Chen and Lyu, Jing},
+  booktitle={Proceedings of the IEEE/CVF conference on computer vision and pattern recognition},
+  year={2026}
 }
 ```
 
