@@ -2,7 +2,7 @@
 
   <h1>
     <img src="assets/Stand-In.png" width="85" alt="Logo" valign="middle">
-    Stand-In
+    Stand-In (CVPR 2026)
   </h1>
 
   <h3>A Lightweight and Plug-and-Play Identity Control for Video Generation</h3>
