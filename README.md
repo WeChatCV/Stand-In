@@ -22,6 +22,7 @@
 ---
 
 ## 🔥 News
+* **[2026.08.10]** Stand-In-V2 is coming soon!
 * **[2026.02.21]** 🎉 Stand-In has been accepted by **CVPR 2026**!
 * **[2025.12.22]** The Stand-In version based on Wan2.2 is now live—feel free to use it! 🚀✨
 * **[2025.08.18]** We have released a version compatible with VACE. Not only pose control, but you can also try other control methods such as depth maps, combined with Stand-In to maintain identity simultaneously.
